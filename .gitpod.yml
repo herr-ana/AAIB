@@ -1,0 +1,40 @@
+# List the start up tasks. Learn more https://www.gitpod.io/docs/config-start-tasks/
+tasks: 
+  - init: |
+      (
+          #Install Streamlit
+          sudo pip3 install streamlit
+
+
+          #Install MQTT
+          sudo apt install -y mosquitto
+          sudo apt install mosquitto-clients
+
+          sudo service mosquitto start
+          sudo service mosquitto status
+
+          #Install Paho-MQTT
+          sudo pip3 install paho-mqtt
+          git clone https://github.com/eclipse/paho.mqtt.python.git
+          cd paho.mqtt.python
+          python setup.py install
+
+          #Install other Python Libraries
+          #python -m pip install sounddevice
+          #python -m pip install pyaudio
+
+          sudo apt-get install portaudio19-dev
+          python -m pip install scipy
+          python -m pip install matplotlib
+          pip install plotly==5.11.0
+      )
+    command: streamlit run onetapstream.py
+
+# List the ports to expose. Learn more https://www.gitpod.io/docs/config-ports/
+ports:
+  - port: 1883
+    onOpen: ignore
+  - port: 8501
+    name: Web App
+    onOpen: open-browser
+    visibility: public
