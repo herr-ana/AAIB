@@ -4,25 +4,26 @@ Created on Wed Nov 30 16:39:29 2022
 
 @author: lauraherrera
 
-One Tap 
+Python code to receive input from MQTT to start recording and send over the 
+calculated data.
+
 """
 from paho.mqtt import client as mqtt_client
 import sounddevice as sd
-from scipy.io.wavfile import write
 import threading
 import time
-import matplotlib.pyplot as plt
-import scipy as sc
-from scipy.fft import *
 import numpy as np
+import json
+import librosa 
 
 status=''
 
-broker="test.mosquitto.org"
+broker='mqtt.eclipseprojects.io'
+#broker="test.mosquitto.org"
 port = 1883
-topicStatus = "laulau/status"
-topicData="laulau/data"
-client_id = 'laulau_status'
+topicStatus = "aherr/status"
+topicData="aherr/data"
+client_id = 'aherr'  
 
 
 def connect_mqtt() -> mqtt_client:
@@ -41,47 +42,49 @@ def connect_mqtt() -> mqtt_client:
 def on_message(client, userdata, msg):
     global status
     status=msg.payload.decode()
-    print(status)
+    print('Status received:', status) 
     
 def recording():
-    #fs = 44100  # Sample rate
-    fs=2400
+    fs=2400 #Sample rate
     seconds = 5  # Duration of recording
     
+    #Recording Data
     print('Recording...')
     myrecording = sd.rec(int(seconds * fs), samplerate=fs, channels=1)
     sd.wait()  # Wait until recording is finished
-    
-    yf=rfft(myrecording)
-    freq=np.mean(abs(yf))
-    Mfreq=10**3*freq
-    sty=np.array2string(myrecording)
-    
-    global sound
-    #sound=np.trunc(Mfreq)
-    #sound=np.arange(0,10,0.1)
-    
-    sound=str(myrecording.tolist())
+   
+    #Calulations for Power Spectrum and Zero Crossing Rate
+    t=np.arange(0,5,5/(fs*5))
+    y=myrecording[:,0]
+    ps=np.abs(np.fft.fft(y))**2
+    time_step=5/(fs*5)
+    freqs=np.fft.fftfreq(len(y),time_step)
+    idx=np.argsort(freqs)
+    lib=librosa.feature.zero_crossing_rate(y)
+
+    #Encoding Data to send over MQTT 
+    data=[y.tolist(),t.tolist(),lib.tolist(),freqs.tolist(),ps.tolist(),idx.tolist()]
+    data_send=json.dumps(data)
+
+    return data_send
     
   
-def subscribing(): # subscribing since the beggining, wait to receive the 1
+def subscribing(): # subscribing since the beggining, waiting to receive status from mqtt
     
     client.subscribe(topicStatus)
     client.on_message = on_message
     client.loop_forever()
     
 
-def publishing(): # publishing when 1 is received from mqtt
+def publishing(): # publishing when 'start' is received from mqtt
      while (True):   
         time.sleep(1)
-        if status=='1':
-            recording()
-            client.publish(topicData,sound)
-            client.publish(topicStatus,'3')
+        if status=='start':
+            data_send=recording()
+            client.publish(topicData,data_send)
+            client.publish(topicStatus,'stop')
             print('Publishing...')
-            print(sound)
-        #time.sleep(1)
-    #client.loop_start()
+
 
     
 client = connect_mqtt()
@@ -89,14 +92,11 @@ client = connect_mqtt()
 sub=threading.Thread(target=subscribing)
 pub=threading.Thread(target=publishing)
 
-### Start MAIN ###
-
 sub.start()
 pub.start()
 
-#status=publishing()
 
-if status=='3':
+if status=='stop': #stopping when 'stop' is received from mqtt
     sub.stop()
     pub.stop()
     
